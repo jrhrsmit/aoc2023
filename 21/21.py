@@ -25,7 +25,8 @@ class Node:
         self.row = row
         self.col = col
         self.neighbors = []
-        self.lowest_steps = math.inf
+        self.lowest_steps_even = math.inf
+        self.lowest_steps_odd = math.inf
 
     def add_neighbor(self, neighbor):
         self.neighbors.append(neighbor)
@@ -36,6 +37,9 @@ def load(rows: list[str], wrap: bool = False) -> tuple[dict, Node]:
     nodes = {}
     width = len(rows[0])
     height = len(rows)
+    log.debug(f"width: {width}, height: {height}")
+    assert height % 2 == 1, "Height must be odd"
+    assert width == height, "Width must equal height"
 
     for row, r in enumerate(rows):
         for col, char in enumerate(r):
@@ -66,24 +70,40 @@ def load(rows: list[str], wrap: bool = False) -> tuple[dict, Node]:
     return nodes, start
 
 
-def run_part1(nodes: dict, start: Node, max_steps: int = 64) -> int:
-    visited = set()
+@functools.lru_cache(maxsize=None)
+def end_positions_per_page(nodes: dict, start: Node, max_steps) -> int:
+    visited_even = set()
+    visited_odd = set()
     end_nodes = set()
     queue = [(start, 0)]
     while queue:
         node, steps = queue.pop(0)
-        # log.debug(f"Node: {node.row}, {node.col}, steps: {steps}")
-        if (node, steps) in visited:
-            continue
-        elif steps == max_steps:
-            end_nodes.add(node)
-        elif steps < max_steps:
+        if steps % 2 == 0:
+            if steps >= node.lowest_steps_even and node in visited_even:
+                continue
+            node.lowest_steps_even = steps
+            visited_even.add(node)
+        else:
+            if steps >= node.lowest_steps_odd and node in visited_odd:
+                continue
+            node.lowest_steps_odd = steps
+            visited_odd.add((node, steps))
+        if steps < max_steps:
             for neighbor in node.neighbors:
-                if (neighbor, steps + 1) in visited:
-                    continue
                 queue.append((neighbor, steps + 1))
-        visited.add((node, steps))
-    return len(end_nodes)
+
+    return len(visited_even)
+
+class Page:
+    def __init__(self, nodes: dict, start: Node, max_steps: int):
+        self.start = start
+        self.max_steps = max_steps
+
+def end_positions_inf_grid(nodes: dict, start: Node, max_steps) -> int:
+
+    end_positions = set()
+    queue = [(0, 0, start, max_steps)]
+
 
 
 def main(
@@ -97,12 +117,12 @@ def main(
 
     if part1:
         nodes, start = load(rows)
-        ans = run_part1(nodes, start, 64)
+        ans = end_positions_per_page(nodes, start, 64)
         log.info(f"Part 1 answer: {ans}")
 
     if part2:
         nodes, start = load(rows, True)
-        ans = run_part1(nodes, start, 500)
+        ans = run_part1(nodes, start, 1000, len(rows))
         log.info(f"Part 2 answer: {ans}")
 
 
