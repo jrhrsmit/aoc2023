@@ -143,7 +143,7 @@ def main(input_file: typer.FileText):
         )
 
     print(f"Part 1 total winnings: {total_winnings}")
-    
+
     hands = []
     global card_values
     global card_values_joker
@@ -168,7 +168,6 @@ def main(input_file: typer.FileText):
         )
 
     print(f"Part 2 total winnings: {total_winnings}")
-
 
 
 if __name__ == "__main__":
