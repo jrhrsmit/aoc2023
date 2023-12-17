@@ -159,6 +159,36 @@ def lmao(spring_conditions: str, groups: list[int]) -> list[str]:
     return num_solutions
 
 
+@functools.lru_cache(maxsize=10*2**20)
+def find_matches(
+    search_string: str, regex: str, group: int
+) -> tuple[tuple[str]]:
+    match = re.search(regex, search_string)
+
+    remainders = []
+
+    span_sum = 0
+    while match:
+        span = match.span()
+        # if there is a rock in the string before the match, it is illegal
+        span_sum += span[0]
+        if "#" in search_string[: span[0]]:
+            break
+        search_match = "#" * group + "." * (span[1] - span[0] - group)
+        search_prefix = "." * span_sum + search_match
+
+        remainders.append((search_prefix, search_string[span[1] :]))
+
+        # continue next iteration from 1 character after the match
+        span_sum += 1
+        if "#" in search_string[: span[0] + 1]:
+            break
+        search_string = search_string[span[0] + 1 :]
+        match = re.search(regex, search_string)
+
+    return remainders
+
+
 def find_first_occurrence_rec(
     string: str, groups: list[int], prefix: str = "", depth: int = 0
 ) -> int:
@@ -198,53 +228,17 @@ def find_first_occurrence_rec(
         remainder_end = ""
         regex = build_regex_from_group(groups[0], True)
 
-    match = re.search(regex, search_string)
-
     log.debug(
         dbg
-        + f"rem_end_len: {remainder_end_len}\n"
-        + dbg
-        + f"search_string: {search_string}\n"
-        + dbg
+        + f"rem_end_len: {remainder_end_len} "
+        + f"search_string: {search_string} "
         + f"regex: {regex}"
     )
 
-    if not match:
-        log.debug(dbg + "No match, 0 solutions for this branch")
-        return 0
-
+    matches = find_matches(search_string, regex, groups[0])
     remainders = []
-
-    span_sum = 0
-    while match:
-        span = match.span()
-        # if there is a rock in the string before the match, it is illegal
-        span_sum += span[0]
-        if "#" in search_string[: span[0]]:
-            break
-        log.debug(
-            dbg + f"Found match: {match}, "
-            f"span: {match.span()}, "
-            f"string: {search_string}, "
-            f"remainder_end: {remainder_end}, "
-        )
-        search_match = "#" * groups[0] + "." * (span[1] - span[0] - groups[0])
-        search_prefix = prefix + "." * span_sum + search_match
-        log.debug(
-            dbg + f"Prefix + match: {search_prefix}, "
-            f"remainder: {search_string[span[1]:]} + {remainder_end}"
-        )
-
-        remainders.append(
-            (search_prefix, search_string[span[1] :] + remainder_end)
-        )
-
-        # continue next iteration from 1 character after the match
-        span_sum += 1
-        if "#" in search_string[: span[0] + 1]:
-            break
-        search_string = search_string[span[0] + 1 :]
-        match = re.search(regex, search_string)
+    for match in matches:
+        remainders.append((prefix + match[0], match[1] + remainder_end))
 
     log.debug(dbg + f"Remainders: {remainders}")
     groups = groups[1:]
@@ -259,23 +253,20 @@ def find_first_occurrence_rec(
     k = 0
     for p, s in remainders:
         l = find_first_occurrence_rec(s, groups, p, depth + 1)
-        # if l == 0:
-        #    break
         k += l
 
     log.debug(dbg + f"Found {k} solutions for this branch")
     return k
 
 
-def run(input: list[str]):
-    def main(
-        input_file: typer.FileText,
-        log_level: str = "INFO",
-        part1: bool = True,
-        part2: bool = True,
-        n: int = -1,
-    ):
-        log.setLevel(log_level)
+def main(
+    input_file: typer.FileText,
+    log_level: str = "INFO",
+    part1: bool = True,
+    part2: bool = True,
+    n: int = -1,
+):
+    log.setLevel(log_level)
 
     input = input_file.read().strip().split("\n")
 
