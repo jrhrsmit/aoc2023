@@ -95,27 +95,14 @@ def get_side_in(
 
 
 def fill_area(path: dict[set[int]], side_in: dict[set[int]]) -> int:
-    filled_area = side_in.copy()
-    # for y, xs in side_in.items():
-    #     for x in xs.copy():
-    #         for dy in range(y - 1, y + 2):
-    #             for dx in range(x - 1, x + 2):
-    #                 if dx == x and dy == y:
-    #                     continue
-    #                 if dy in path and dx in path[dy]:
-    #                     continue
-    #                 if dy not in filled_area:
-    #                     filled_area[dy] = set()
-    #                 filled_area[dy].add(dx)
-
     min_y, max_y, min_x, max_x = get_min_max(path)
 
     filled_area_size = 0
     for y in track(range(min_y, max_y + 1), description="Calculting area"):
         filled_area_size += len(path[y])
-        if y not in filled_area:
+        if y not in side_in:
             continue
-        xs_filled = sorted(list(filled_area[y]))
+        xs_filled = sorted(list(side_in[y]))
         xs_path = sorted(list(path[y]))
         for x1, x2 in pairwise(xs_path):
             if x2 - x1 > 1:
@@ -161,6 +148,51 @@ def add_to_path(path: dict[set[int]], pos: tuple[int]):
     path[pos[0]].add(pos[1])
 
 
+def update_to_path(path: dict[set[int]], row: int, cols: set[int]):
+    if row not in path:
+        path[row] = set()
+    path[row].update(cols)
+
+
+def walk_direction(
+    pos: tuple[int],
+    heading: Heading,
+    distance: int,
+    path: dict[set[int]],
+    side_r: dict[set[int]],
+    side_l: dict[set[int]],
+) -> tuple[tuple[int], dict[set[int]], dict[set[int]], dict[set[int]]]:
+    pos_l = new_pos(pos, get_left_heading(heading))
+    pos_r = new_pos(pos, get_right_heading(heading))
+
+    if heading == Heading.EAST:
+        x_range = range(pos[1], pos[1] + distance + 1)
+        update_to_path(path, pos[0], set(x_range))
+        update_to_path(side_l, pos_l[0], set(x_range))
+        update_to_path(side_r, pos_r[0], set(x_range))
+        pos = (pos[0], pos[1] + distance)
+    elif heading == Heading.WEST:
+        x_range = range(pos[1], pos[1] - distance - 1, -1)
+        update_to_path(path, pos[0], set(x_range))
+        update_to_path(side_l, pos_l[0], set(x_range))
+        update_to_path(side_r, pos_r[0], set(x_range))
+        pos = (pos[0], pos[1] - distance)
+    elif heading == Heading.NORTH:
+        for y in range(pos[0], pos[0] - distance - 1, -1):
+            add_to_path(path, (y, pos[1]))
+            add_to_path(side_l, (y, pos_l[1]))
+            add_to_path(side_r, (y, pos_r[1]))
+        pos = (pos[0] - distance, pos[1])
+    elif heading == Heading.SOUTH:
+        for y in range(pos[0], pos[0] + distance + 1):
+            add_to_path(path, (y, pos[1]))
+            add_to_path(side_l, (y, pos_l[1]))
+            add_to_path(side_r, (y, pos_r[1]))
+        pos = (pos[0] + distance, pos[1])
+
+    return pos, path, side_r, side_l
+
+
 def loop_area(plan: list[tuple]) -> int:
     pos = (0, 0)
 
@@ -171,24 +203,15 @@ def loop_area(plan: list[tuple]) -> int:
     side_r = {}
     side_l = {}
 
-    old_heading = None
+    # with Pool(processes=nproc) as p:
+    #    for result in p.imap(walk_direcion lmao_args):
+    #        ans += result
     for heading, distance in track(plan, description="Walking path"):
-        for _ in range(distance):
-            old_pos = pos
-            pos = new_pos(pos, heading)
-            add_to_path(path, pos)
-
-            heading_l = get_left_heading(heading)
-            pos_l1 = new_pos(old_pos, heading_l)
-            add_to_path(side_l, pos_l1)
-            pos_l2 = new_pos(pos, heading_l)
-            add_to_path(side_l, pos_l2)
-
-            heading_r = get_right_heading(heading)
-            pos_r1 = new_pos(old_pos, heading_r)
-            add_to_path(side_r, pos_r1)
-            pos_r2 = new_pos(pos, heading_r)
-            add_to_path(side_r, pos_r2)
+        log.debug(f"pos: {pos}, heading: {heading}, distance: {distance}")
+        pos, path, side_r, side_l = walk_direction(
+            pos, heading, distance, path, side_r, side_l
+        )
+        log.debug(f"new_pos: {new_pos}")
 
     for y, xs in path.items():
         if y in side_r:
@@ -234,6 +257,7 @@ def main(
             )
             for row in rows
         ]
+        distances = [distance for _, distance in dig_plan]
         area = loop_area(dig_plan)
         log.info(f"Part 1: {area}")
 
