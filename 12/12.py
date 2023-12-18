@@ -13,23 +13,26 @@ logging.basicConfig(
 )
 log = logging.getLogger("rich")
 
+memo = {}
 
-# @functools.lru_cache(maxsize=2**8)
+
 def get_spaces(
-    spaces_len: int,
-    spaces_sum: int,
     input_string: str,
     groups: tuple[int],
 ) -> int:
+    global memo
+    if (input_string, groups) in memo:
+        return memo[(input_string, groups)]
+
     num_solutions = 0
 
-    if spaces_len == 1:
+    if not groups:
         if "#" in input_string:
             return 0
         else:
             return 1
 
-    for space in range(0, spaces_sum + 1):
+    for space in range(0, len(input_string) - sum(groups) - len(groups) + 2):
         if "#" in input_string[:space]:
             break
         if "." in input_string[space : space + groups[0]]:
@@ -38,11 +41,10 @@ def get_spaces(
             continue
 
         num_solutions += get_spaces(
-            spaces_len - 1,
-            spaces_sum - space,
             input_string[space + groups[0] + 1 :],
             groups[1:],
         )
+    memo[(input_string, groups)] = num_solutions
     return num_solutions
 
 
@@ -50,17 +52,8 @@ def lmao(args) -> list[str]:
     spring_conditions = args[0]
     groups = args[1]
 
-    total_len = len(spring_conditions)
-    len_hashtags = sum(groups) + len(groups) - 1
-    len_spaces = len(groups) + 1
-    sum_spaces = total_len - len_hashtags
-
-    log.debug(
-        f"Processing {spring_conditions} {groups}, ({len_spaces} {sum_spaces})"
-    )
-    num_solutions = get_spaces(
-        len_spaces, sum_spaces, spring_conditions, groups
-    )
+    log.debug(f"Processing {spring_conditions} {groups}")
+    num_solutions = get_spaces(spring_conditions, groups)
 
     return num_solutions
 
