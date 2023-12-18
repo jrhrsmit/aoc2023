@@ -50,19 +50,23 @@ def lmao(args) -> list[str]:
     total_len = len(spring_conditions)
     len_hashtags = sum(groups) + len(groups) - 1
     len_spaces = len(groups) + 1
+    sum_spaces = total_len - len_hashtags
 
+    log.debug(
+        f"Processing {spring_conditions} {groups}, ({len_spaces} {sum_spaces})"
+    )
     num_solutions = get_spaces(
-        len_spaces, total_len - len_hashtags, spring_conditions, groups
+        len_spaces, sum_spaces, spring_conditions, groups
     )
 
     return num_solutions
 
 
-def multi_lmao(lmao_args: list[tuple]) -> int:
+def multi_lmao(lmao_args: list[tuple], nproc: int = 1) -> int:
     ans = 0
     with Progress() as progress:
         task_id = progress.add_task("Working...", total=len(lmao_args))
-        with Pool(processes=1) as p:
+        with Pool(processes=nproc) as p:
             for result in p.imap(lmao, lmao_args):
                 ans += result
                 progress.advance(task_id)
@@ -76,6 +80,7 @@ def main(
     part1: bool = True,
     part2: bool = True,
     n: int = -1,
+    nproc: int = 10,
 ):
     log.setLevel(log_level)
 
@@ -92,7 +97,7 @@ def main(
             groups = tuple([int(g) for g in i[1].split(",")])
             part1_input.append((spring_conditions, groups))
 
-        ans = multi_lmao(part1_input)
+        ans = multi_lmao(part1_input, nproc)
         log.info(f"Part 1: Answer: {ans}")
 
     if part2:
@@ -103,7 +108,7 @@ def main(
             groups = tuple([int(g) for g in i[1].split(",")] * 5)
             part2_input.append((spring_conditions, groups))
 
-        ans = multi_lmao(part2_input)
+        ans = multi_lmao(part2_input, nproc)
         log.info(f"Part 2: Answer: {ans}")
 
 
