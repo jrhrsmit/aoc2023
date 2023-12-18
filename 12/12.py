@@ -23,8 +23,11 @@ def get_spaces(
 ) -> int:
     num_solutions = 0
 
-    if spaces_len == 1 or spaces_sum == 0:
-        return 1
+    if spaces_len == 1:
+        if "#" in input_string:
+            return 0
+        else:
+            return 1
 
     for space in range(0, spaces_sum + 1):
         if "#" in input_string[:space]:
