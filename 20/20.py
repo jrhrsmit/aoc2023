@@ -31,8 +31,7 @@ class Module:
         self.cc_period = None
 
     def __repr__(self):
-        modules = [f"{sym}, " for sym in self.next_modules]
-        return f"{self.symbol}{self.name} -> {modules}"
+        return f"{self.symbol}{self.name} -> {self.next_modules}"
 
 
 class FF(Module):
@@ -41,7 +40,6 @@ class FF(Module):
         self.state = False
         self.symbol = "%"
 
-    # @functools.lru_cache(maxsize=None)
     def rx(self, origin, data):
         if not data:
             self.state = not self.state
@@ -55,20 +53,19 @@ class Conjunction(Module):
     def __init__(self, name, next_modules):
         super().__init__(name, next_modules)
         self.symbol = "&"
-        self.state = {}
+        self.state_inputs = {}
+        self.state = False
 
-    def add_input(self, name):
+    def add_input(self, name, data):
         if not isinstance(name, str):
             raise ValueError(f"Type of name is: {type(name)}")
-        self.state[name] = False
+        self.state_inputs[name] = data
+        self.state = not all(self.state_inputs.values())
 
-    def get_output(self):
-        return not all(self.state.values())
-
-    # @functools.lru_cache(maxsize=None)
     def rx(self, origin, data):
-        self.state[origin] = data
-        return (self.name, not all(self.state.values()), self.next_modules)
+        self.state_inputs[origin] = data
+        self.state = not all(self.state_inputs.values())
+        return (self.name, self.state, self.next_modules)
 
 
 class Broadcaster(Module):
@@ -76,7 +73,6 @@ class Broadcaster(Module):
         super().__init__(name, next_modules)
         self.symbol = ""
 
-    # @functools.lru_cache(maxsize=None)
     def rx(self, origin, data):
         return (self.name, data, self.next_modules)
 
@@ -84,47 +80,66 @@ class Broadcaster(Module):
 def run_sim_part2(modules):
     t_start = time.time()
 
-    last_conj = [m for m in modules.values() if "rx" in m.next_modules][0]
-    log.debug(f"Last conjunction: {last_conj}, inputs: {last_conj.inputs}")
-    req_all_high = last_conj.inputs
+    last_conj = [m for m in modules.values() if "rx" in m.next_modules]
+    if len(last_conj) != 1:
+        raise ValueError(f"Expected one last conjunction, got: {last_conj}")
+    last_conj = last_conj[0]
+    log.info(f"Last conjunction: {last_conj}, inputs: {last_conj.inputs}")
+
+    req_states = [(n, True) for n in last_conj.inputs]
     req_periods = {}
 
-    for button_presses in track(range(1, 2**48)):
+    cc = 0
+    for button_presses in track(range(1, 2**20)):
         tx_queue = [("button", False, ["broadcaster"])]
+        next_tx_queue = []
+        prev_cc_button = None
+        cc_button = 0
         while tx_queue:
             origin, data, next_modules = tx_queue.pop(0)
             for next_module in next_modules:
                 if next_module == "rx":
-                    if not data:
-                        log.info(f"Low pulse on rx at button: {button_presses}")
-                        return button_presses
-                    continue
-                elif next_module == "output":
                     continue
                 tx = modules[next_module].rx(origin, data)
                 if tx:
-                    tx_queue.append(tx)
+                    next_tx_queue.append(tx)
+                if not tx_queue:
+                    tx_queue = next_tx_queue.copy()
+                    next_tx_queue = []
+                    cc += 1
+                    cc_button += 1
 
-        for n in req_all_high:
-            m = modules[n]
-            if m.get_output():
-                log.info(f"Found high pulse on {n} at button: {button_presses}")
-                req_periods[next_module] = button_presses
-                if len(req_periods) == len(req_all_high):
-                    log.info(f"Found all periods: {req_periods}")
-                    lcm = np.lcm.reduce(list(req_periods.values()))
-                    log.info(f"LCM: lcm")
-                    return lcm
+                for n, s in req_states:
+                    m = modules[n]
+                    if m.state == s:
+                        log.info(
+                            f"Found {s} state on {n} at button: {button_presses}, cc: {cc}"
+                        )
+                        req_periods[next_module] = cc
+                        if len(req_periods) == len(req_states):
+                            log.info(f"Found all periods: {req_periods}")
+                            lcm = np.lcm.reduce(list(req_periods.values()))
+                            log.info(f"LCM CC: {lcm}")
+                            log.info(f"Button press: {lcm // prev_cc_button}")
+                            return lcm // prev_cc_button
+        
+        if prev_cc_button and cc_button != prev_cc_button:
+            log.error(f"Button cc period changed: {prev_cc_button} -> {cc_button}")
+        log.debug(f"Button press: {button_presses}, cc_button: {cc_button}, cc: {cc}")
+
         if button_presses % 1000000 == 0:
             t_end = time.time()
-            speed = (button_presses) / (t_end - t_start)
+            speed = button_presses / (t_end - t_start)
+            log.debug(
+                f"Req states: {[(modules[n].state, s) for n, s in req_states]}"
+            )
             log.info(f"Button press: {button_presses}, Bp/s: {speed:.2f}")
 
     t_end = time.time()
     log.info(f"Simulation took {t_end - t_start:.2f} seconds")
-    log.info(f"States per second: {len(states) / (t_end - t_start):.2f}")
+    log.error(f"Did not find all required states")
 
-    return pulses_sum
+    return 0
 
 
 def run_sim_part1(button_presses, modules):
@@ -175,7 +190,7 @@ def load(rows):
                 continue
             modules[n].inputs.append(m.name)
             if isinstance(modules[n], Conjunction):
-                modules[n].add_input(m.name)
+                modules[n].add_input(m.name, modules[m.name].state)
     return modules
 
 
